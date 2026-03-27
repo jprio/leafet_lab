@@ -53,7 +53,7 @@
                 .openPopup();
 
 
-            var gpx = 'fichier.gpx';
+            var gpx = 'https://www.topografix.com/fells_loop.gpx';
             new L.GPX(gpx, { async: true }).on('loaded', function (e) {
                 map.fitBounds(e.target.getBounds());
             }).addTo(map);
