@@ -65,6 +65,9 @@
                 map.fitBounds(e.target.getBounds());
             }).addTo(map);
 
+            new L.GPX("boz.gpx", { async: true }).on('loaded', function (e) {
+                map.fitBounds(e.target.getBounds());
+            }).addTo(map);
 
         </script>
 
