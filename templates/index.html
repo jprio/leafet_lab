@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Quick Start - Leaflet</title>
+
+    <nav>
+        {% if 'user' in session %}
+        <span>Welcome, {{ session['user']['email'] }}!</span>
+        <span><img src="{{ session['user']['picture'] }}"></span>
+        <a href="/logout">Logout</a>
+        {% else %}
+        <a href="/login">Login</a>
+        {% endif %}
+    </nav>
+
+    <link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
+
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+        integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+        integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.js"
+        integrity="sha512-FatQYmF8k/KuvOgmwfRGRqlyzbG13etWz1GOO+JO6YQyhGgw5tVl9ihC9RS8S6iiS18CZAnZBvUoKHlGI6BTPQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+        }
+
+        .leaflet-container {
+            height: 400px;
+            width: 600px;
+            max-width: 100%;
+            max-height: 100%;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div style="width: 100%;height: 100%; display: flex;">
+        <div style="width: 20%; padding: 20px; overflow-y: auto; border-right: 1px solid #ddd;">
+            <h2>Trail_List</h2>
+            <ul style="list-style: none; padding: 0;">
+                <li style="padding: 10px; margin: 10px 0; background: #f5f5f5; border-radius: 5px; cursor: pointer;">
+                    <strong>Boz Uchuk Lakes</strong><br>
+                    <small>Jyrgalan Region</small>
+                </li>
+                <li style="padding: 10px; margin: 10px 0; background: #f5f5f5; border-radius: 5px; cursor: pointer;">
+                    <strong>Boze Trail</strong><br>
+                    <small>Local Loop</small>
+                </li>
+            </ul>
+        </div>
+        <div id="map" style="width: 50%; height: 100%;">
+            <script>
+                var map = L.map('map').setView([51.505, -0.09], 13);
+                const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                },
+                    [
+                        { header: 'X-Requested-With', value: 'my-fancy-app-called-via-file' }
+                    ],
+                    null
+                ).addTo(map);
+
+                var gpx = 'https://jprio-gpx.s3.eu-west-3.amazonaws.com/boz-uchuk-lakes-jyrgalan-region.gpx';
+                new L.GPX(gpx, { async: true }).on('loaded', function (e) {
+                    map.fitBounds(e.target.getBounds());
+                }).addTo(map);
+
+                new L.GPX("boz.gpx", { async: true }).on('loaded', function (e) {
+                    map.fitBounds(e.target.getBounds());
+                }).addTo(map);
+
+            </script>
+        </div>
+        <div style="width: 30%; padding: 20px; overflow-y: auto; border-left: 1px solid #ddd;">
+            <h2>Trail Details</h2>
+            <div id="trail-details">
+                <p><em>Select a trail from the list to see details</em></p>
+            </div>
+        </div>
+    </div>
+    <div style="clear:both"></div>
+
+</body>
+
+</html>
