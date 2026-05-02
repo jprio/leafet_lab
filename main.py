@@ -31,7 +31,8 @@ ALLOWED_EXTENSIONS = {'gpx', 'tcx', 'fit', 'csv'}
 
 DATA = {
         'response_type':"code", # this tells the auth server that we are invoking authorization workflow
-        'redirect_uri':"https://laughing-umbrella-p75jgv4prf75v9-5000.app.github.dev/alltrail", # redirect URI https://console.developers.google.com/apis/credentials
+        # 'redirect_uri':"https://laughing-umbrella-p75jgv4prf75v9-5000.app.github.dev/alltrail", # redirect URI https://console.developers.google.com/apis/credentials
+        'redirect_uri':os.environ['GOOGLE_REDIRECT_URI'],
         'scope': 'https://www.googleapis.com/auth/userinfo.email', # resource we are trying to access through Google API
         'client_id':os.environ['GOOGLE_CLIENT_ID'], # client ID from https://console.developers.google.com/apis/credentials
         'prompt':'consent'} # adds a consent screen

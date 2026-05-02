@@ -2,6 +2,7 @@ import os
 
 os.environ['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID')
 os.environ['GOOGLE_CLIENT_SECRET'] = os.getenv('GOOGLE_CLIENT_SECRET')
+os.environ['GOOGLE_REDIRECT_URI'] = os.getenv('GOOGLE_REDIRECT_URI')
 os.environ['AIVEN_USERNAME'] = os.getenv('AIVEN_USERNAME')
 os.environ['AIVEN_PASSWORD'] = os.getenv('AIVEN_PASSWORD')
 os.environ['AIVEN_HOST'] = os.getenv('AIVEN_HOST')
