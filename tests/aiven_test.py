@@ -96,15 +96,34 @@ def test_postgis_to_geojson():
     engine = get_engine()
     from sqlalchemy.ext.declarative import declarative_base
     from sqlalchemy.orm import sessionmaker 
+    from geojson import Feature, FeatureCollection
+    from geoalchemy2.shape import to_shape
+
+    import geojson
     Base = declarative_base()
 
     Session = sessionmaker(bind=engine)
     session = Session()
+
     # SELECT ST_AsGeoJSON(geom) FROM table
-    trx=session.query(GPXTrack.name, GPXTrack.geom.ST_AsGeoJSON()).all()
-    for name, geom_json in trx:
-        print(f"Track: {name}, Geometry (GeoJSON): {geom_json}")    
-# test_aiven_postgis()
+    # trx=session.query(GPXTrack.name, GPXTrack.geom.ST_AsGeoJSON()).filter(
+    trx=session.query(GPXTrack.name, GPXTrack.geom).filter(
+        GPXTrack.id == 34)
+    import shapely.geometry
+    features = []
+    for name, geom in trx:
+        feature = Feature(
+                id=1,
+                geometry=shapely.geometry.mapping(to_shape(geom)),
+                properties={"name": name}
+            )
+        features.append(feature)
+        collection = FeatureCollection(features)
+        print(collection)
+        # geojson_geometry = shapely.geometry.mapping(geom_json)
+        # print(f"Track: {name}, Geometry (GeoJSON): {geom_json[:100]}")    
+        # print(feature = geojson.Feature(geometry=geojson_geometry)
+
 
 def pandas_read_postgis_to_geojson():
     engine = get_engine()
@@ -138,7 +157,6 @@ def alchemy_test():
         shapely_point = to_shape(location.geom)
         # print("shapely_point : " + str(shapely_point))
         print("shapely_point length : " + str(shapely_point.length*100))
-
         # Transform to a projected CRS (e.g., UTM Zone 33N)
         # project = partial(
         #     pyproj.transform,
@@ -167,7 +185,7 @@ def alchemy_test_mean_location():
     print(df_mean)
 
 # pandas_read_postgis_to_geojson()
-# test_postgis_to_geojson()
+test_postgis_to_geojson()
 # test_save_gpx()
-alchemy_test()
+# alchemy_test()
 # alchemy_test_mean_location()

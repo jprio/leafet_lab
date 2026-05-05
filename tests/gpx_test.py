@@ -32,7 +32,7 @@ def calculate_elevation_gain(gpx_file_path):
     
     return elevation_gain
 
-gpx_file = open('boz.gpx', 'r')
+gpx_file = open('tests/gpx/fells_loop.gpx', 'r')
 
 gpx = gpxpy.parse(gpx_file)
 for track in gpx.tracks:
@@ -55,5 +55,7 @@ for waypoint in gpx.waypoints:
 
 for route in gpx.routes:
     print ('Route:')
-   
-print("elevation gain : {0:.2f} meters".format(calculate_elevation_gain('boz.gpx')))
+
+elevation_gain = calculate_elevation_gain('tests/gpx/kolsu-naryn.gpx')   
+print("elevation gain : {0:.2f} meters".format(float(elevation_gain)))
+print("elevation gain type : " + str(type(elevation_gain)))

@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from sqlalchemy import text
 from typing import List
@@ -8,12 +9,13 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
-from sqlalchemy import Table, Column, Integer, String, MetaData, Sequence, Identity
+from sqlalchemy import Table, Column, Integer, String, MetaData, Sequence, Identity, DateTime, Date
 from geoalchemy2 import Geometry, WKTElement
 from shapely.geometry import LineString
-from sqlalchemy import event
+from sqlalchemy import event, func
 from sqlalchemy.orm import attributes
 from geoalchemy2.shape import to_shape
+from sqlalchemy import event
 
 class Base(DeclarativeBase):
     pass
@@ -26,7 +28,7 @@ class User(Base):
     fullname: Mapped[Optional[str]]
     collections: Mapped[List["Collection"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
-    )
+    ) 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, name={self.name!r}, fullname={self.fullname!r})"
     
@@ -60,8 +62,6 @@ class Trail(Base):
     def __repr__(self) -> str:
         return f"Trail(id={self.id!r}, name={self.name!r})"
     
-# Base = declarative_base()
-
 class Track(Base):
     __tablename__ = 'tracks'
     id = Column(Integer, primary_key=True)
@@ -71,13 +71,23 @@ class GPXTrack(Base):
     __tablename__ = 'gpx_tracks'
     __allow_unmapped__ = True
     id = Column(Integer, primary_key=True)
+    elevation_gain = Column(Integer)
     name = Column(String)
     type = Column(String)
     owner = Column(Integer, nullable=False)
     geom = Column(Geometry(geometry_type='LINESTRING', srid=4326))
-    length: int
+    insert_date: Column[datetime] = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    # length: int
     def __repr__(self) -> str:
-        return f"Trail(id={self.id!r}, name={self.name!r}, length={self.length!r})"
+        return f"GPXTrack(id={self.id!r}, name={self.name!r})"
+
+# @event.listens_for(GPXTrack, 'before_commit')
+# def gpxtrack_before_commit(session, instance):
+#     print(instance)
+
+@event.listens_for(GPXTrack, "before_insert")
+def receive_before_insert(mapper, connection, target):
+    print("Before inserting GPXTrack:", target)
 
 @event.listens_for(GPXTrack, "load")
 def load_b(track, context):

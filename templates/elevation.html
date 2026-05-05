@@ -145,7 +145,15 @@
         var controlElevation = L.control.elevation(elevation_options).addTo(map);
 
         // Load track from url (allowed data types: "*.geojson", "*.gpx", "*.tcx")
-        controlElevation.load("https://raruto.github.io/leaflet-elevation/examples/via-emilia.gpx");
+        // controlElevation.load("https://raruto.github.io/leaflet-elevation/examples/via-emilia.gpx");
+        data = {{ geojson | safe }};
+        // data.features = data.features.filter(f => f.geometry.type != "Point");
+
+        let layer = L.geoJson(data);
+        layer.addTo(map);
+        // controlElevation.load("https://dataworks.calderdale.gov.uk/download/emg4m/11q/companies-april-2026.geojson");
+        controlElevation.addData(data, layer);
+        map.fitBounds(layer.getBounds());
 
     </script>
 

@@ -19,13 +19,17 @@ import gpxpy
 import pandas as pd
 from folium.map import Marker
 from jinja2 import Template
-from sqlalchemy import create_engine, Column, Integer, String, Uuid 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from geoalchemy2 import Geometry, WKTElement
 from shapely.geometry import LineString
 from app.models.domain import Base, User, Collection, Trail, GPXTrack
-import config
+import  app.models .persistence as persistence
+import geopandas as gpd
+import geojson
+from geoalchemy2.shape import to_shape
+from sqlalchemy import select, func
+from app.utils.gpxutils import calculate_elevation_gain
 
 ALLOWED_EXTENSIONS = {'gpx', 'tcx', 'fit', 'csv'}
 
@@ -51,32 +55,28 @@ REQ_URI = CLIENT.prepare_request_uri(
     scope=DATA['scope'],
     prompt=DATA['prompt'])
 
-def get_engine():
-    engine = create_engine(f'postgresql://{os.environ["AIVEN_USERNAME"]}:{os.environ["AIVEN_PASSWORD"]}@{os.environ["AIVEN_HOST"]}:{os.environ["AIVEN_PORT"]}/{os.environ["AIVEN_DBNAME"]}?sslmode=require')
-    return  engine
+from flask_sqlalchemy import SQLAlchemy
 
-def get_geo_engine():    
-    engine = create_engine(
-        f'postgresql://{os.environ["AIVEN_USERNAME"]}:{os.environ["AIVEN_PASSWORD"]}@{os.environ["AIVEN_HOST"]}:{os.environ["AIVEN_PORT"]}/{os.environ["AIVEN_DBNAME"]}?sslmode=require',
-        echo=True,
-        plugins=["geoalchemy2"]
-    )
-    return engine
 
 app = Flask(__name__, static_url_path='', 
             static_folder='static')
-# Enable CORS for all routes and origins (development only)
 CORS(app) 
-# Or restrict to specific origins
-# CORS(app, resources={r"/api/*": {"origins": "https://frontend.example.com"}})
 
 leaflet = Leaflet()
 leaflet.init_app(app)
-# login_manager.init_app(app)
+
 
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1)
 app.secret_key="123"
+app.config["SQLALCHEMY_DATABASE_URI"] = f'postgresql://{os.environ["AIVEN_USERNAME"]}:{os.environ["AIVEN_PASSWORD"]}@{os.environ["AIVEN_HOST"]}:{os.environ["AIVEN_PORT"]}/{os.environ["AIVEN_DBNAME"]}?sslmode=require'
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_size': 10,
+    'max_overflow': 20,
+    'pool_timeout': 30
+}
 
+db = SQLAlchemy(model_class=Base)
+db.init_app(app)
 
 @app.route('/login')
 def login():
@@ -84,20 +84,11 @@ def login():
     return redirect(REQ_URI)
 
 @app.route('/alltrail')
-def alltrail_geoalchemy():
+def alltrail():
     # session.pop('user',None)
     # redirect to the newly created Sign-In URI
-    import geopandas as gpd
-    from sqlalchemy import func, bindparam
-    from geoalchemy2.shape import to_shape
-    import geojson
-    from geoalchemy2.shape import to_shape
 
-    engine= get_geo_engine()
-
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
+    session = db.session
     locations = session.query(GPXTrack).all()
     
     query = "SELECT AVG(ST_Y(ST_Centroid(geom))) AS mean_latitude, AVG(ST_X(ST_Centroid(geom))) AS mean_longitude FROM gpx_tracks;"
@@ -110,11 +101,11 @@ def alltrail_geoalchemy():
         shapely_geom = to_shape(geom)
         geojson_str = geojson.dumps(shapely_geom)
 
-        print(gpx_track)
         track_list.append(gpx_track)
-        tooltip = name + '<br>' + f"Length: {gpx_track.length:.2f} km" + ' <br>'  + f"Type: {gpx_track.type}"
+        tooltip = name + '<br>'     \
+         + f"Length: {gpx_track.length:.2f} km" + ' <br>'       \
+                  + f"Elevation gain: {gpx_track.elevation_gain} m"  + ' <br> '       + f"Type: {gpx_track.type}"
          
-        # Script de clic qui charge les données d'élévation
         on_click_script = folium.JsCode("""
         function(feature, layer) {
             layer.on('click', function(e) {
@@ -125,19 +116,15 @@ def alltrail_geoalchemy():
                     var gjl = L.geoJson(layer.toGeoJSON(),{
 		                onEachFeature: window.parent.controlElevation.addData.bind(window.parent.controlElevation)
 		            });
-
-		            // map.addLayer(service).fitBounds(bounds);
-                    // window.parent.controlElevation.addData(layer.toGeoJSON());
-                }  
-                                                                                    
+                }                                                               
             });
         }
         """)
-        if "hike" in str(gpx_track.type):
+        if "HIKE" in str(gpx_track.type):
             color = 'green'
         elif str(gpx_track.type) == "running":
             color = 'blue'
-        elif "offroad" in str(gpx_track.type):
+        elif "OFFROAD" in str(gpx_track.type):
             color = 'red'
         else:
             color = 'gray'
@@ -145,7 +132,7 @@ def alltrail_geoalchemy():
         gj.add_to(m)
     
     # Passer les données GeoJSON au template
-    engine.dispose()
+    # engine.dispose()
     m.get_root().width = "100%"
     m.get_root().height = "600px"
 
@@ -209,10 +196,8 @@ def map():
 def folium_map():
     import geopandas as gpd
     import folium
-    from sqlalchemy.ext.declarative import declarative_base
-    from sqlalchemy.ext.declarative import declarative_base
     from geojson_length import calculate_distance, Unit 
-    engine = get_engine()
+    engine = persistence.get_engine()
     gdf = gpd.read_postgis("SELECT name, geom FROM gpx_tracks", con=engine, geom_col='geom')
 
     # S'assurer que le CRS est EPSG:4326
@@ -252,8 +237,22 @@ def allowed_file(filename):
 
 @app.route('/elevation', methods=['GET'])
 def elevation():
-    session.pop('user', None)
-    return render_template('elevation.html')
+    from geoalchemy2 import functions
+    import shapely.geometry
+    import geojson
+    session = db.session
+    # geojson_qry = session.query(functions.ST_AsGeoJSON(GPXTrack.geom)).filter(
+    qry = session.query(GPXTrack).filter(
+        GPXTrack.id == 34
+    )
+    trx=qry[0]
+    feature = geojson.Feature(
+            id=1,
+            geometry=shapely.geometry.mapping(to_shape(trx.geom)),
+            properties={"name": trx.name}
+        )
+    collection = geojson.FeatureCollection([feature])
+    return render_template('elevation.html', geojson=collection)
 
 @app.route('/logout')
 def logout():
@@ -265,7 +264,7 @@ def logout():
 def upload_file():
     owner = session['user']['sub']
     print(request.form)
-    engine = get_engine()
+    engine = persistence.get_engine()
     # check if the post request has the file part
     if 'file' not in request.files:
         flash('No file part')
@@ -294,23 +293,28 @@ def upload_file():
             distance_2d = track.length_2d()
             print(f"Track: {track.name}, 2D Distance: {distance_2d:.2f} meters")
             # elevation gain
-            
+            elevation_gain = calculate_elevation_gain(gpx)
+            print(f"Track: {track.name}, Elevation Gain: {elevation_gain:.2f} meters")
+
             for segment in track.segments:
                 point= segment.points[0]
                 print ('Start at ({0},{1}) -> {2}'.format(point.latitude, point.longitude, point.elevation))
 
-            points = [(point.longitude, point.latitude) for segment in track.segments for point in segment.points]
+            points = [(point.longitude, point.latitude, point.elevation) for segment in track.segments for point in segment.points]
             line_string = LineString(points)
             
             # Convert to WKT for insertion
             wkt = line_string.wkt
-            
-            new_track = GPXTrack(name=track.name, geom=WKTElement(wkt, srid=4326), owner=owner, type=type)
-            sess.add(new_track)
-            print(f"Inserted track: {track.name} with {len(points)} points.")
-            sess.commit()    
-            sess.close()
-            
+            try:
+                new_track = GPXTrack(name=track.name, geom=WKTElement(wkt, srid=4326), owner=owner, type=type, elevation_gain=elevation_gain, insert_date=func.now())
+                sess.add(new_track)
+                print(f"Inserted track: {track.name} with {len(points)} points.")
+                sess.commit()    
+                sess.close()
+            except Exception as e:  
+                print(f"Error inserting track: {track.name}, Error: {e}")
+                sess.rollback()
+                sess.close()            
         for waypoint in gpx.waypoints:
             print ('waypoint {0} -> ({1},{2})'.format(waypoint.name, waypoint.latitude, waypoint.longitude))
 
