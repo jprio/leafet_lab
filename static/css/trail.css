@@ -1504,3 +1504,8 @@
         #open-track-filters-button.hidden {
             display: none;
         }
+
+        #measure-distance-button,
+        #measure-distance-panel {
+            z-index: 1100;
+        }

@@ -8,7 +8,10 @@
                 <div id="track-sidebar-empty">Aucune trace affichée.</div>
             </div>
         </aside>
-        <div id="map"></div>
+        <div id="map" style="position: relative;">
+            <button id="measure-distance-button" type="button" style="position: absolute; bottom: 16px; left: 16px; z-index: 1100; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer;">📏 Mesurer</button>
+            <div id="measure-distance-panel" style="position: absolute; bottom: 54px; left: 16px; z-index: 1100; min-width: 220px; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; background: rgba(255,255,255,0.95); box-shadow: 0 2px 6px rgba(0,0,0,0.2); font-size: 13px;">Cliquez sur la carte pour ajouter des points.</div>
+        </div>
         <div id="elevation" style="visibility: hidden;"></div>
     </div>
     </div>
@@ -183,6 +186,143 @@
             minLength: null,
             maxLength: null
         };
+
+        let measureMode = false;
+        let measurePoints = [];
+        const measureButton = document.getElementById('measure-distance-button');
+        const measurePanel = document.getElementById('measure-distance-panel');
+
+        function resetMeasurement() {
+            measurePoints = [];
+            if (map && map.getSource('measure-distance')) {
+                map.getSource('measure-distance').setData({
+                    type: 'FeatureCollection',
+                    features: []
+                });
+            }
+            if (measurePanel) {
+                measurePanel.innerHTML = 'Cliquez sur la carte pour ajouter des points.';
+            }
+            if (measureButton) {
+                measureButton.textContent = '📏 Mesurer';
+                measureButton.classList.remove('active');
+            }
+            if (map) {
+                map.getCanvas().style.cursor = '';
+            }
+        }
+
+        function haversineDistanceMeters(pointA, pointB) {
+            const toRad = (value) => (value * Math.PI) / 180;
+            const earthRadius = 6371000;
+            const deltaLat = toRad(pointB.lat - pointA.lat);
+            const deltaLng = toRad(pointB.lng - pointA.lng);
+            const latA = toRad(pointA.lat);
+            const latB = toRad(pointB.lat);
+            const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2) * Math.cos(latA) * Math.cos(latB);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return earthRadius * c;
+        }
+
+        function updateMeasurementDisplay() {
+            if (measurePoints.length < 2) {
+                if (measurePanel) {
+                    measurePanel.innerHTML = measurePoints.length === 1
+                        ? '1 point ajouté. Ajoutez un second point pour calculer la distance.'
+                        : 'Cliquez sur la carte pour ajouter des points.';
+                }
+                return;
+            }
+
+            const totalDistance = measurePoints.reduce((sum, point, index) => {
+                if (index === 0) return sum;
+                return sum + haversineDistanceMeters(measurePoints[index - 1], point);
+            }, 0);
+
+            if (measurePanel) {
+                measurePanel.innerHTML = `<strong>${(totalDistance / 1000).toFixed(2)} km</strong><br/>Cliquez pour ajouter un point ou relancez la mesure pour recommencer.`;
+            }
+        }
+
+        function addMeasurePoint(lngLat) {
+            measurePoints.push({ lng: lngLat.lng, lat: lngLat.lat });
+            const features = [];
+
+            if (measurePoints.length > 0) {
+                features.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [measurePoints[0].lng, measurePoints[0].lat]
+                    },
+                    properties: {
+                        id: 'start',
+                        kind: 'start'
+                    }
+                });
+            }
+
+            if (measurePoints.length > 1) {
+                features.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: measurePoints.map((point) => [point.lng, point.lat])
+                    },
+                    properties: {
+                        kind: 'path'
+                    }
+                });
+            }
+
+            if (measurePoints.length > 1) {
+                features.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [measurePoints[measurePoints.length - 1].lng, measurePoints[measurePoints.length - 1].lat]
+                    },
+                    properties: {
+                        id: 'end',
+                        kind: 'end'
+                    }
+                });
+            }
+
+            if (map && map.getSource('measure-distance')) {
+                map.getSource('measure-distance').setData({
+                    type: 'FeatureCollection',
+                    features
+                });
+            }
+
+            updateMeasurementDisplay();
+        }
+
+        function toggleMeasureMode() {
+            measureMode = !measureMode;
+            if (!measureMode) {
+                resetMeasurement();
+                return;
+            }
+
+            measurePoints = [];
+            if (measurePanel) {
+                measurePanel.innerHTML = 'Cliquez sur la carte pour ajouter des points.';
+            }
+            if (measureButton) {
+                measureButton.textContent = '❌ Annuler';
+                measureButton.classList.add('active');
+            }
+            if (map) {
+                map.getCanvas().style.cursor = 'crosshair';
+            }
+        }
+
+        if (measureButton) {
+            measureButton.addEventListener('click', toggleMeasureMode);
+        }
 
         const filterNameInput = document.getElementById('filter-name');
         const filterTypeInput = document.getElementById('filter-type');
@@ -523,6 +663,8 @@
                 // console.log(feature.geometry.coordinates);
             }
         });
+
+        
         var map = new maplibregl.Map({
             container: 'map',
             zoom: 12,
@@ -585,6 +727,10 @@
             }
                 ],
                 sources: {
+                    /*measure_distance: {
+                        type: 'geojson',
+                    },
+                    */
                     // Use a different source for terrain and hillshade layers, to improve render quality
                     terrainSourceAws: {
                         type: 'raster',
@@ -654,6 +800,13 @@
                 showCompass: true
             })
         );
+        map.addControl(
+        new maplibregl.ScaleControl({
+            maxWidth: 80,
+            unit: 'metric',
+            
+        }), 'bottom-right'
+        );
 
         map.addControl(
             new maplibregl.TerrainControl({
@@ -716,6 +869,52 @@
                     'circle-opacity': 0.95
                 }
             });
+            map.addSource('measure-distance', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: []
+                }
+            });
+
+            if (map.getSource('measure-distance')) {
+                map.getSource('measure-distance').setData({
+                    type: 'FeatureCollection',
+                    features: []
+                });
+            }
+
+            map.addLayer({
+                id: 'measure-distance-points',
+                type: 'circle',
+                source: 'measure-distance',
+                paint: {
+                    'circle-radius': ['match', ['get', 'kind'], 'start', 8, 'end', 8, 6],
+                    'circle-color': ['match', ['get', 'kind'], 'start', '#1f77b4', 'end', '#d62728', '#7f7f7f'],
+                    'circle-stroke-color': '#ffffff',
+                    'circle-stroke-width': 2,
+                    'circle-opacity': 1
+                },
+                filter: ['==', ['geometry-type'], 'Point']
+            });
+
+            map.addLayer({
+                id: 'measure-distance-line',
+                type: 'line',
+                source: 'measure-distance',
+                layout: {
+                    'line-cap': 'round',
+                    'line-join': 'round'
+                },
+                paint: {
+                    'line-color': '#d62728',
+                    'line-width': 3,
+                    'line-dasharray': [2, 2],
+                    'line-opacity': 1
+                },
+                filter: ['==', ['geometry-type'], 'LineString']
+            });
+
 
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -762,6 +961,7 @@
         */
 
         map.on('click', 'trails', (e) => {
+            if (measureMode) return;
         //map.on('mouseover', 'trails', (e) => {
             const coordinates = e.features[0].geometry.coordinates.slice();
 
@@ -806,6 +1006,7 @@
         });
 
         map.on('click', 'trails', (e) => {
+            if (measureMode) return;
             const bounds = new maplibregl.LngLatBounds();
             const coords = e.features[0].geometry?.coordinates || [];
             if (e.features[0].geometry?.type === 'LineString') {
@@ -866,6 +1067,7 @@
 
         let hoveredStateId = null;
         map.on('click', "trails", (e) => {
+            if (measureMode) return;
             // console.log("mouse enter", e);
             // if (e.features.length > 0) {
 
@@ -921,6 +1123,10 @@
         let creatingWaypointCoords = null;
 
         map.on('click', (e) => {
+            if (measureMode) {
+                addMeasurePoint(e.lngLat);
+                return;
+            }
             console.log("creatingWaypoint", creatingWaypoint, "e.defaultPrevented", e.defaultPrevented);
             // Only create waypoint if not clicking on existing waypoints or tracks
             if (creatingWaypoint || e.defaultPrevented) return;
