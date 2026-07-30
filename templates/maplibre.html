@@ -70,6 +70,7 @@
             ElevationProfile,
             renderElevationProfile
         } from "./js/elevation_profile.js";
+        import * as maplibregl from 'https://unpkg.com/maplibre-gl@^6.0.0/dist/maplibre-gl.mjs';
 
         const demSourceMaptiler = new mlcontour.DemSource({
             url: 'https://api.maptiler.com/tiles/terrain-rgb-v2/{z}/{x}/{y}.webp?key=TJBqVnX8a4CMqkunq4W0',
@@ -804,7 +805,7 @@
         new maplibregl.ScaleControl({
             maxWidth: 80,
             unit: 'metric',
-            
+            maxWidth: 200
         }), 'bottom-right'
         );
 
